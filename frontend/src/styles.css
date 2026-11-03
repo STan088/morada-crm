@@ -340,135 +340,125 @@ h1 { margin-bottom: 7px; color: #263935; font: 700 29px 'Manrope', sans-serif; l
 .login-help-message { position: absolute; right: 0; bottom: calc(100% + 10px); left: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 13px; border: 1px solid #dfe9e2; border-radius: 9px; background: #f0f7f2; color: #426f5d; font-size: 10px; line-height: 1.5; box-shadow: 0 8px 22px rgba(28,54,43,.07); }
 .login-help-message button { display: grid; flex: none; place-items: center; border: 0; background: transparent; color: inherit; }
 
-@media (min-width: 1440px) {
-  .page-content { padding-right: 48px; padding-left: 48px; }
-  .property-photo { height: 205px; }
+/* =========================================
+   Novos estilos para Mensagens do Cliente & Sino
+========================================= */
+.client-message-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 22px;
+  background: #ffffff;
+  border: 1px solid #e9ebe7;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
-@media (max-width: 1180px) {
-  .login-layout { grid-template-columns: minmax(0, 1.1fr) minmax(370px, .9fr); gap: 50px; }
-  .login-story { padding-right: 32px; padding-left: 32px; }
-  .sidebar { width: 226px; }
-  .main-area { margin-left: 226px; }
-  .page-content { padding-right: 25px; padding-left: 25px; }
-  .topbar { padding-right: 25px; padding-left: 25px; }
-  .dashboard-grid { grid-template-columns: minmax(0, 1.4fr) minmax(230px, .9fr); }
-  .filter-row { flex-wrap: wrap; }
-  .search-box { flex-basis: 100%; }
+.client-message-card:hover {
+  transform: translateY(-2px);
+  border-color: #80aa99;
+  box-shadow: 0 8px 25px rgba(38,55,48,0.06);
 }
-@media (max-width: 900px) {
-  .login-page { padding-right: 22px; padding-left: 22px; }
-  .login-layout { grid-template-columns: minmax(0, 1fr) minmax(330px, .95fr); gap: 28px; }
-  .login-story { min-height: min(760px, calc(100vh - 128px)); padding: 33px 27px 25px; }
-  .story-copy h1 { font-size: 27px; }
-  .story-copy p { font-size: 11px; }
-  .story-photo-card > img { height: 240px; }
-  .sidebar { width: 72px; align-items: center; padding: 20px 9px 14px; }
-  .brand { margin: 1px 0 29px; }
-  .brand > span:last-child, .workspace-copy, .workspace-card > svg, .sidebar-label, .nav-item span, .sidebar-bottom, .workspace-card { display: none; }
-  .side-nav { width: 100%; }
-  .nav-item { justify-content: center; padding: 0; }
-  .nav-item span.nav-count { position: absolute; margin: -26px 0 0 27px; width: 15px; height: 15px; font-size: 8px; }
-  .main-area { margin-left: 72px; }
-  .dashboard-grid { grid-template-columns: 1fr; }
-  .right-column { grid-template-columns: 1fr 1fr; }
-  .dashboard-properties { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .dashboard-properties .property-card:last-child { display: none; }
+.client-message-info {
+  display: grid;
+  flex: 1;
+  gap: 6px;
 }
-@media (max-width: 640px) {
-  .login-page { padding: 17px 16px 26px; }
-  .login-header { height: 37px; margin-bottom: 18px; }
-  .login-brand { gap: 8px; font-size: 23px; }
-  .login-brand .brand-mark { width: 31px; height: 31px; }
-  .login-help { gap: 5px; font-size: 9px; }
-  .login-layout { display: flex; min-height: 0; flex-direction: column; align-items: stretch; gap: 23px; }
-  .login-story { min-height: 0; padding: 24px 20px 18px; }
-  .story-copy { margin-bottom: 18px; }
-  .story-eyebrow { margin-bottom: 12px; font-size: 9px; }
-  .story-copy h1 { margin-bottom: 8px; font-size: 24px; }
-  .story-copy p { font-size: 10px; }
-  .story-photo-card > img { height: 165px; }
-  .story-photo-caption { min-height: 64px; gap: 9px; padding: 9px 12px; }
-  .story-caption-icon { width: 32px; height: 32px; }
-  .story-photo-caption strong { font-size: 9px; }
-  .story-photo-caption small { font-size: 8px; }
-  .story-footer { display: none; }
-  .login-panel { max-width: 460px; align-self: center; padding: 0 0 8px; }
-  .login-tabs { margin-bottom: 18px; }
-  .login-tabs button { min-height: 37px; font-size: 10px; }
-  .login-panel h2 { font-size: 22px; }
-  .login-description { margin-bottom: 20px; font-size: 10px; }
-  .login-input-wrap { height: 45px; margin-bottom: 16px; }
-  .secure-note { margin-top: 18px; }
-  .sidebar { width: min(280px, 82vw); align-items: stretch; transform: translateX(-105%); transition: transform .2s; box-shadow: none; }
-  .sidebar.sidebar-open { transform: translateX(0); box-shadow: 15px 0 50px rgba(22,37,32,.12); }
-  .brand { margin-left: 4px; }
-  .brand > span:last-child { display: inline; }
-  .workspace-card { display: flex; }
-  .workspace-copy { display: grid; }
-  .workspace-card > svg { display: block; }
-  .sidebar-label { display: block; }
-  .nav-item { justify-content: flex-start; padding: 0 12px; }
-  .nav-item span { display: inline; }
-  .nav-item span.nav-count { position: static; width: 20px; height: 20px; margin: 0; }
-  .sidebar-bottom { display: grid; }
-  .mobile-backdrop { position: fixed; inset: 0; z-index: 19; display: block; border: 0; background: rgba(20,32,27,.34); }
-  .main-area { margin-left: 0; }
-  .topbar { height: 58px; gap: 9px; padding: 0 15px; }
-  .mobile-menu-button { display: inline-grid; }
-  .breadcrumbs { flex: 1; gap: 5px; font-size: 10px; }
-  .topbar-actions { gap: 5px; }
-  .notification-button { display: none; }
-  .page-content { padding: 25px 15px 45px; }
-  .page-heading { align-items: flex-start; flex-direction: column; gap: 15px; margin-bottom: 19px; }
-  h1 { font-size: 25px; }
-  .page-subtitle { font-size: 11px; line-height: 1.5; }
-  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-bottom: 14px; }
-  .metric-card { min-height: 111px; padding: 14px; }
-  .metric-card:last-child { grid-column: span 2; min-height: 94px; }
-  .metric-card > strong { margin-top: 10px; font-size: 23px; }
-  .metric-top { font-size: 9px; }
-  .dashboard-grid { gap: 12px; }
-  .task-panel { padding: 17px 15px; }
-  .panel-heading h2 { font-size: 13px; }
-  .panel-heading p { max-width: 190px; font-size: 9px; line-height: 1.45; }
-  .right-column { grid-template-columns: 1fr; }
-  .dashboard-properties { grid-template-columns: 1fr; }
-  .dashboard-properties .property-card:last-child { display: block; }
-  .property-grid { grid-template-columns: 1fr; gap: 12px; }
-  .property-photo { height: 195px; }
-  .catalog-heading h1 { font-size: 26px; }
-  .catalog-counts { min-height: 61px; padding: 0 13px; font-size: 9px; }
-  .catalog-counts strong { font-size: 20px; }
-  .catalog-counts > span + span { padding-left: 13px; }
-  .filter-row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
-  .search-box { grid-column: span 2; height: 40px; }
-  .search-box kbd { display: none; }
-  .select-filter { min-width: 0; height: 39px; padding: 0 8px; }
-  .filter-button { height: 39px; font-size: 9px; }
-  .select-filter select { font-size: 9px; }
-  .results-line { font-size: 9px; }
-  .client-heading { grid-template-columns: 1fr 32%; min-height: 165px; gap: 4px; }
-  .catalog-welcome { padding: 17px 0 17px 15px; }
-  .catalog-welcome .eyebrow { font-size: 7px; }
-  .catalog-welcome h1 { font-size: 25px; }
-  .catalog-welcome p { max-width: 190px; font-size: 10px; }
-  .client-hero-image { height: 165px; }
-  .table-panel { padding: 16px 12px 4px; }
-  .tip-banner { align-items: flex-start; flex-wrap: wrap; padding: 14px; }
-  .tip-banner > span { min-width: calc(100% - 40px); }
-  .tip-banner .text-button { margin-left: 31px; }
-  .deal-row { grid-template-columns: 33px minmax(100px, 1fr) 80px 30px; gap: 8px; padding: 9px 0; }
-  .deal-amount { font-size: 9px; }
-  .deal-stage, .progress-dots { display: none; }
-  .small-metrics .metric-card { min-height: 102px; }
-  .contact-empty { min-height: 65vh; padding: 15px; }
-  .contact-empty h1 { font-size: 25px; }
-  .form-two { grid-template-columns: 1fr; }
-  .lead-dialog { padding: 23px 18px; }
-  .workflow-dialog { padding: 23px 18px; }
-  .workflow-dialog h2 { font-size: 20px; }
-  .dialog-image { height: 205px; }
-  .dialog-content { padding: 17px; }
-  .dialog-content h2 { font-size: 19px; }
-  .dialog-specs { gap: 10px; flex-wrap: wrap; }
+.client-message-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.client-message-top strong {
+  color: #263935;
+  font-size: 13px;
+  font-family: 'Manrope', sans-serif;
+}
+.client-property-tag {
+  color: #347663;
+  background: #e8f2ed;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+}
+.client-message-preview {
+  margin: 0;
+  color: #71807a;
+  font-size: 12px;
+}
+.client-message-preview span {
+  font-weight: 600;
+  color: #2b3e37;
+}
+
+/* Painel Suspenso de Notificações */
+.notifications-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 320px;
+  background: #ffffff;
+  border: 1px solid #e9ebe7;
+  border-radius: 14px;
+  box-shadow: 0 12px 35px rgba(22,37,32,0.12);
+  z-index: 100;
+  overflow: hidden;
+  animation: fadeInDown 0.2s ease;
+}
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid #f0f2ef;
+  background: #fbfcfb;
+}
+.dropdown-header strong {
+  font-size: 12px;
+  color: #263935;
+  font-family: 'Manrope', sans-serif;
+}
+.dropdown-header span {
+  font-size: 10px;
+  color: #80908a;
+  cursor: pointer;
+  font-weight: 600;
+}
+.dropdown-header span:hover {
+  color: #c66c62;
+}
+.dropdown-list {
+  max-height: 260px;
+  overflow-y: auto;
+  display: grid;
+}
+.dropdown-item {
+  padding: 12px 18px;
+  border-bottom: 1px solid #f4f6f4;
+  display: grid;
+  gap: 3px;
+}
+.dropdown-item.unread {
+  background: #f4f8f5;
+}
+.dropdown-item p {
+  margin: 0;
+  font-size: 11px;
+  color: #384841;
+  line-height: 1.4;
+}
+.dropdown-item small {
+  font-size: 9px;
+  color: #929a96;
+}
+.dropdown-empty {
+  padding: 24px;
+  text-align: center;
+  color: #929a96;
+  font-size: 11px;
 }

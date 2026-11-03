@@ -1,27 +1,69 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   ArrowDownUp, ArrowRight, ArrowUpRight, Bell, BedDouble, BriefcaseBusiness,
   Building2, CalendarDays, Check, CheckCheck, ChevronDown, ChevronRight,
   CircleHelp, ClipboardList, Clock3, Eye, EyeOff, Filter, Heart, House,
   LayoutDashboard, ListFilter, LockKeyhole, LogOut, Mail, Menu, MessageCircle,
   MoreHorizontal, Plus, Search, ShieldCheck, SlidersHorizontal, Sparkles,
-  Sprout, Tag, Users, X,
+  Sprout, Tag, Users, X, Send,
 } from 'lucide-react';
+import { AiChatWorkspace } from './AiChatWorkspace';
 
 const API = 'http://localhost:8080/api';
 const currency = new Intl.NumberFormat('pt-BR', {
   style: 'currency', currency: 'BRL', maximumFractionDigits: 0,
 });
 const compactCurrency = (value) => currency.format(value || 0);
-const initialDeals = [
-  { id: 'pa', initials: 'PA', name: 'Pedro Alves', property: 'Apartamento em Cambuí · IM-021', amount: 'R$ 930.000', stage: 'Contraproposta', progress: 3, tone: 'lilac' },
-  { id: 'rf', initials: 'RF', name: 'Rafael Ferreira', property: 'Casa no Parque Prado · IM-011', amount: 'R$ 720.000', stage: 'Documentação', progress: 4, tone: 'mint' },
-  { id: 'as', initials: 'AS', name: 'Ana Souza', property: 'Apartamento com varanda · IM-014', amount: 'R$ 760.000', stage: 'Primeiro contato', progress: 1, tone: 'coral' },
+
+const initialDealsData = [
+  { id: 1, initials: 'PA', name: 'Pedro Alves', property: 'Apartamento em Cambuí · IM-021', amount: 'R$ 930.000', stage: 'Contraproposta', progress: 3, tone: 'lilac', chat: [{sender: 'client', text: 'Bom dia! Recebi a documentação, podemos fechar em 900 mil?'}] },
+  { id: 2, initials: 'RF', name: 'Rafael Ferreira', property: 'Casa no Parque Prado · IM-011', amount: 'R$ 720.000', stage: 'Documentação', progress: 4, tone: 'mint', chat: [{sender: 'client', text: 'Já enviei o comprovante de renda pro seu email.'}] },
+  { id: 3, initials: 'AS', name: 'Ana Souza', property: 'Apartamento com varanda · IM-014', amount: 'R$ 760.000', stage: 'Primeiro contato', progress: 1, tone: 'coral', chat: [{sender: 'client', text: 'Gostei muito da varanda, quando podemos visitar?'}] },
 ];
 
-function App() {
+export default function App() {
   const [enteredProfile, setEnteredProfile] = useState(null);
   const [loginProfile, setLoginProfile] = useState('cliente');
+
+  const [properties, setProperties] = useState([]);
+  const [leads, setLeads] = useState([]);
+  const [deals, setDeals] = useState(initialDealsData);
+  const [dashboard, setDashboard] = useState(null);
+  const [notifications, setNotifications] = useState([
+    { id: 1, text: 'Nova proposta recebida de Pedro Alves.', time: 'Há 10 min', unread: true }
+  ]);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const [globalError, setGlobalError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    const loadInitialData = async () => {
+      try {
+        const [propsRes, dashRes, leadsRes] = await Promise.all([
+          fetch(`${API}/imoveis`),
+          fetch(`${API}/dashboard`),
+          fetch(`${API}/leads`),
+        ]);
+        if (propsRes.ok && dashRes.ok && leadsRes.ok && active) {
+          const [propsData, dashData, leadsData] = await Promise.all([
+            propsRes.json(), dashRes.json(), leadsRes.json()
+          ]);
+          setProperties(propsData);
+          setDashboard(dashData);
+          setLeads(leadsData.map(l => ({ 
+            ...l, 
+            status: l.status || 'Novo lead', 
+            chat: [{ sender: 'client', text: l.mensagem || 'Olá, tenho interesse neste imóvel!' }] 
+          })));
+          setDataLoaded(true);
+        }
+      } catch (err) {
+        if (active) setGlobalError('Não foi possível carregar os dados da API Java.');
+      }
+    };
+    if (!dataLoaded) loadInitialData();
+    return () => { active = false; };
+  }, [dataLoaded]);
 
   if (!enteredProfile) {
     return <LoginPage initialProfile={loginProfile} onEnter={(profile) => {
@@ -30,7 +72,20 @@ function App() {
     }} />;
   }
 
-  return <CrmWorkspace initialProfile={enteredProfile} onLogout={() => setEnteredProfile(null)} />;
+  return (
+    <CrmWorkspace 
+      key={enteredProfile}
+      profile={enteredProfile} 
+      onLogout={() => setEnteredProfile(null)}
+      properties={properties} setProperties={setProperties}
+      leads={leads} setLeads={setLeads}
+      deals={deals} setDeals={setDeals}
+      dashboard={dashboard} setDashboard={setDashboard}
+      notifications={notifications} setNotifications={setNotifications}
+      globalError={globalError}
+      dataLoaded={dataLoaded}
+    />
+  );
 }
 
 function LoginPage({ initialProfile, onEnter }) {
@@ -140,7 +195,7 @@ function LoginPage({ initialProfile, onEnter }) {
               {client ? 'Entrar na área do cliente' : 'Entrar no CRM'} <ArrowRight size={17} />
             </button>
           </form>
-          <p className="demo-disclaimer">Acesso demonstrativo. A autenticação real ainda não está conectada.</p>
+          <p className="demo-disclaimer">Acesso demonstrativo bidirecional com notificações ativas.</p>
           <div className="first-access-card">
             <strong>É seu primeiro acesso?</strong>
             <p>{client
@@ -160,186 +215,176 @@ function LoginPage({ initialProfile, onEnter }) {
   );
 }
 
-function CrmWorkspace({ initialProfile, onLogout }) {
-  const [profile, setProfile] = useState(initialProfile);
-  const [section, setSection] = useState(initialProfile === 'corretor' ? 'Visão geral' : 'Explorar imóveis');
-  const [properties, setProperties] = useState([]);
-  const [dashboard, setDashboard] = useState(null);
-  const [leads, setLeads] = useState([]);
-  const [deals, setDeals] = useState(initialDeals);
-  const [activeDealCount, setActiveDealCount] = useState(6);
+function CrmWorkspace({ profile, onLogout, properties, setProperties, leads, setLeads, deals, setDeals, dashboard, setDashboard, notifications, setNotifications, globalError, dataLoaded }) {
+  const [section, setSection] = useState(profile === 'corretor' ? 'Visão geral' : 'Explorar imóveis');
   const [search, setSearch] = useState('');
   const [type, setType] = useState('');
   const [purpose, setPurpose] = useState('');
   const [favoriteIds, setFavoriteIds] = useState([]);
+  
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [leadProperty, setLeadProperty] = useState(null);
   const [leadError, setLeadError] = useState('');
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
+  const [propertyDialogOpen, setPropertyDialogOpen] = useState(false);
   const [contactError, setContactError] = useState('');
+  const [propertyError, setPropertyError] = useState('');
   const [contactSaving, setContactSaving] = useState(false);
+  const [propertySaving, setPropertySaving] = useState(false);
+  
+  const [activeChatLead, setActiveChatLead] = useState(null);
+  const [activeDealChat, setActiveDealChat] = useState(null);
+  const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
+
   const [notice, setNotice] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
   const [mobileMenu, setMobileMenu] = useState(false);
 
-  const query = useMemo(() => {
-    const params = new URLSearchParams();
-    if (search.trim()) params.set('busca', search.trim());
-    if (type) params.set('tipo', type);
-    if (purpose) params.set('finalidade', purpose);
-    return params.toString();
-  }, [search, type, purpose]);
-
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const response = await fetch(`${API}/imoveis${query ? `?${query}` : ''}`);
-        if (!response.ok) throw new Error('A API não conseguiu carregar os imóveis. Tente novamente.');
-        const propertyData = await response.json();
-        if (active) setProperties(propertyData);
-      } catch {
-        if (active) setError('Não foi possível carregar os imóveis. Verifique se a API Java está online.');
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-    load();
-    return () => { active = false; };
-  }, [query]);
-
-  useEffect(() => {
-    let active = true;
-    if (profile !== 'corretor') {
-      setDashboard(null);
-      setLeads([]);
-      return () => { active = false; };
+  const filteredProperties = useMemo(() => {
+    let result = section === 'Favoritos' ? properties.filter((p) => favoriteIds.includes(p.id)) : properties;
+    
+    if (search.trim()) {
+      const s = search.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      result = result.filter(p => 
+        p.bairro.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(s) ||
+        p.cidade.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(s) ||
+        p.codigo.toLowerCase().includes(s) ||
+        p.titulo.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(s)
+      );
     }
-    const loadWorkspace = async () => {
-      try {
-        const [dashboardResponse, leadsResponse] = await Promise.all([
-          fetch(`${API}/dashboard`),
-          fetch(`${API}/leads`),
-        ]);
-        if (!dashboardResponse.ok || !leadsResponse.ok) {
-          throw new Error('A API não conseguiu carregar os dados do corretor.');
-        }
-        const [dashboardData, leadsData] = await Promise.all([
-          dashboardResponse.json(), leadsResponse.json(),
-        ]);
-        if (active) {
-          setDashboard(dashboardData);
-          setLeads(leadsData);
-        }
-      } catch {
-        if (active) setError('Não foi possível carregar os dados do corretor. Verifique se a API Java está online.');
-      }
-    };
-    loadWorkspace();
-    return () => { active = false; };
-  }, [profile]);
+    if (type) {
+      result = result.filter(p => p.tipo.toLowerCase() === type.toLowerCase());
+    }
+    if (purpose) {
+      result = result.filter(p => p.finalidade.toUpperCase() === purpose.toUpperCase());
+    }
+    return result;
+  }, [properties, section, favoriteIds, search, type, purpose]);
 
   async function submitLead(formData) {
-    setNotice('');
-    setLeadError('');
-    setError('');
+    setNotice(''); setLeadError('');
     try {
       const response = await fetch(`${API}/leads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nome: formData.get('nome'),
-          email: formData.get('email'),
-          telefone: formData.get('telefone'),
-          imovelId: leadProperty?.id ?? null,
-          mensagem: formData.get('mensagem'),
+          nome: formData.get('nome'), email: formData.get('email'), telefone: formData.get('telefone'),
+          imovelId: leadProperty?.id ?? null, mensagem: formData.get('mensagem'),
         }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.detail || result.message || 'Não foi possível enviar a solicitação.');
-      setNotice('Solicitação enviada. Um corretor entrará em contato.');
-      setLeads((previous) => [result, ...previous]);
+      if (!response.ok) throw new Error(result.detail || result.message || 'Falha ao enviar.');
+      setNotice('Sua mensagem foi enviada. O corretor retornará na aba "Mensagens".');
+      setLeads((previous) => [{ ...result, status: 'Novo lead', chat: [{ sender: 'client', text: result.mensagem || 'Tenho interesse!' }] }, ...previous]);
+      
+      // Adiciona notificação para o Corretor
+      setNotifications(prev => [{ id: Date.now(), text: `Novo interesse de ${result.nome}`, time: 'Agora', unread: true }, ...prev]);
+      
       setLeadProperty(null);
-      setDashboard((previous) => previous
-        ? { ...previous, novosLeads: previous.novosLeads + 1 }
-        : previous);
-    } catch (submissionError) {
-      const message = submissionError.message || 'Falha ao enviar. Confira se a API Java está online.';
-      setLeadError(message);
-      setError(message);
+      setDashboard((previous) => previous ? { ...previous, novosLeads: previous.novosLeads + 1 } : previous);
+    } catch (err) {
+      setLeadError(err.message);
     }
   }
 
   async function submitContact(formData) {
-    setContactError('');
-    setContactSaving(true);
+    setContactError(''); setContactSaving(true);
     try {
       const propertyId = formData.get('imovelId');
       const response = await fetch(`${API}/leads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nome: formData.get('nome'),
-          email: formData.get('email'),
-          telefone: formData.get('telefone'),
-          imovelId: propertyId ? Number(propertyId) : null,
-          mensagem: formData.get('mensagem'),
+          nome: formData.get('nome'), email: formData.get('email'), telefone: formData.get('telefone'),
+          imovelId: propertyId ? Number(propertyId) : null, mensagem: formData.get('mensagem'),
         }),
       });
       const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.detail || result.message || 'Não foi possível adicionar o contato.');
-      }
-      setLeads((previous) => [result, ...previous]);
-      setDashboard((previous) => previous
-        ? { ...previous, novosLeads: previous.novosLeads + 1 }
-        : previous);
+      if (!response.ok) throw new Error(result.detail || result.message || 'Falha.');
+      setLeads((previous) => [{ ...result, status: 'Novo lead', chat: [{ sender: 'client', text: result.mensagem || 'Olá, busco informações.' }] }, ...previous]);
       setContactDialogOpen(false);
       setNotice('Contato adicionado com sucesso.');
-    } catch (submissionError) {
-      setContactError(submissionError.message || 'Falha ao adicionar contato. Verifique se a API está online.');
+    } catch (err) {
+      setContactError(err.message);
     } finally {
       setContactSaving(false);
     }
   }
 
+  async function submitNewProperty(formData) {
+    setPropertyError(''); setPropertySaving(true);
+    try {
+      const newProp = {
+        id: Date.now(), codigo: `IM-0${properties.length + 10}`,
+        tipo: formData.get('tipo'), finalidade: formData.get('finalidade'),
+        titulo: formData.get('titulo'), endereco: formData.get('endereco'),
+        bairro: formData.get('bairro'), cidade: 'Campinas', estado: 'SP',
+        area: Number(formData.get('area')), quartos: Number(formData.get('quartos')),
+        banheiros: Number(formData.get('banheiros')), preco: Number(formData.get('preco')),
+        status: 'DISPONIVEL', imagem: formData.get('imagem') || 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1000&q=85',
+        descricao: formData.get('descricao'), condominio: Number(formData.get('condominio') || 0),
+        andar: Number(formData.get('andar') || 0), quintal: formData.get('quintal') === 'true'
+      };
+      setProperties((prev) => [newProp, ...prev]);
+      setPropertyDialogOpen(false);
+      setNotice('Imóvel cadastrado no catálogo com sucesso!');
+      setDashboard((prev) => prev ? { ...prev, imoveisDisponiveis: prev.imoveisDisponiveis + 1, imoveisNaCarteira: prev.imoveisNaCarteira + 1 } : prev);
+    } catch (err) {
+      setPropertyError('Erro ao cadastrar imóvel.');
+    } finally {
+      setPropertySaving(false);
+    }
+  }
+
+  function updateLeadStatus(leadId, newStatus) {
+    setLeads((prev) => prev.map(l => l.id === leadId ? { ...l, status: newStatus } : l));
+  }
+
+  function updateDealStage(dealId, newStage) {
+    const progressByStage = { 'Primeiro contato': 1, 'Visita agendada': 2, 'Proposta enviada': 3, 'Documentação': 4 };
+    setDeals((prev) => prev.map(d => d.id === dealId ? { ...d, stage: newStage, progress: progressByStage[newStage] || 1 } : d));
+  }
+
   function addDeal(deal) {
     setDeals((previous) => [deal, ...previous]);
-    setActiveDealCount((previous) => previous + 1);
+  }
+
+  function sendLeadMessage(leadId, text, senderProfile) {
+    if (!text.trim()) return;
+    const role = senderProfile === 'corretor' ? 'corretor' : 'client';
+    
+    setLeads((prev) => prev.map(l => l.id === leadId ? { ...l, chat: [...l.chat, { sender: role, text: text.trim() }] } : l));
+    setActiveChatLead((curr) => curr ? { ...curr, chat: [...curr.chat, { sender: role, text: text.trim() }] } : curr);
+    
+    // Dispara notificação para o destinatário oposto
+    const senderName = senderProfile === 'corretor' ? 'Corretor' : 'Cliente';
+    setNotifications(prev => [{ id: Date.now(), text: `Nova mensagem de ${senderName}`, time: 'Agora', unread: true }, ...prev]);
+  }
+
+  function sendDealMessage(dealId, text, senderProfile) {
+    if (!text.trim()) return;
+    const role = senderProfile === 'corretor' ? 'corretor' : 'client';
+    
+    setDeals((prev) => prev.map(d => d.id === dealId ? { ...d, chat: [...d.chat, { sender: role, text: text.trim() }] } : d));
+    setActiveDealChat((curr) => curr ? { ...curr, chat: [...curr.chat, { sender: role, text: text.trim() }] } : curr);
+
+    const senderName = senderProfile === 'corretor' ? 'Corretor' : 'Cliente';
+    setNotifications(prev => [{ id: Date.now(), text: `Atualização na negociação (${senderName})`, time: 'Agora', unread: true }, ...prev]);
   }
 
   function toggleFavorite(id) {
-    setFavoriteIds((current) => current.includes(id)
-      ? current.filter((favorite) => favorite !== id)
-      : [...current, id]);
+    setFavoriteIds((current) => current.includes(id) ? current.filter((favorite) => favorite !== id) : [...current, id]);
+  }
+  function chooseSection(name) {
+    setSection(name); setMobileMenu(false); setSearch(''); setType(''); setPurpose('');
   }
 
-  function chooseSection(name) {
-    setSection(name);
-    setMobileMenu(false);
-    setSearch('');
-    setType('');
-    setPurpose('');
-  }
+  const activeDealCount = deals.filter(d => d.stage !== 'Documentação').length;
+  const loading = !dataLoaded;
+  const unreadCount = notifications.filter(n => n.unread).length;
 
   const navItems = profile === 'corretor'
-    ? [
-      { name: 'Visão geral', icon: LayoutDashboard },
-      { name: 'Imóveis', icon: House },
-      { name: 'Meus contatos', icon: MessageCircle },
-      { name: 'Negociações', icon: ClipboardList },
-    ]
-    : [
-      { name: 'Explorar imóveis', icon: House },
-      { name: 'Favoritos', icon: Heart },
-    ];
-
-  const filteredProperties = section === 'Favoritos'
-    ? properties.filter((property) => favoriteIds.includes(property.id))
-    : properties;
+    ? [ { name: 'Visão geral', icon: LayoutDashboard }, { name: 'Imóveis', icon: House }, { name: 'Meus contatos', icon: MessageCircle }, { name: 'Negociações', icon: ClipboardList } ]
+    : [ { name: 'Explorar imóveis', icon: House }, { name: 'Mensagens', icon: MessageCircle }, { name: 'Favoritos', icon: Heart }, { name: 'Assistente IA', icon: Sparkles } ];
 
   return (
     <div className="app-shell">
@@ -348,7 +393,6 @@ function CrmWorkspace({ initialProfile, onLogout }) {
           <span className="brand-mark"><House size={19} strokeWidth={1.8} /></span>
           <span>morada</span>
         </a>
-
         <div className="workspace-card">
           <span className="workspace-icon"><Building2 size={19} /></span>
           <span className="workspace-copy">
@@ -356,7 +400,6 @@ function CrmWorkspace({ initialProfile, onLogout }) {
             <small>{profile === 'corretor' ? 'Seu espaço de trabalho' : 'Área do cliente'}</small>
           </span>
         </div>
-
         <div className="sidebar-label">{profile === 'corretor' ? 'ESPAÇO DE TRABALHO' : 'MINHA CONTA'}</div>
         <nav className="side-nav">
           {navItems.map(({ name, icon: Icon }) => (
@@ -367,106 +410,124 @@ function CrmWorkspace({ initialProfile, onLogout }) {
             </button>
           ))}
         </nav>
-
         <div className="sidebar-bottom">
-          <div className="sidebar-promo">
-            <Sprout size={23} strokeWidth={1.6} />
-            <strong>Mais tempo para conectar.</strong>
-            <span>Seu próximo bom negócio começa aqui.</span>
-          </div>
+          <div className="sidebar-promo"><Sprout size={23} strokeWidth={1.6} /><strong>Mais tempo para conectar.</strong><span>Seu próximo bom negócio começa aqui.</span></div>
           <button className="help-link"><CircleHelp size={17} /> Central de ajuda</button>
           <div className="profile-row">
             <div className="avatar">{profile === 'corretor' ? 'MC' : 'MA'}</div>
             <span><strong>{profile === 'corretor' ? 'Marina Costa' : 'Marina Almeida'}</strong><small>{profile === 'corretor' ? 'Corretora · CRECI 123456' : 'Cliente'}</small></span>
-            <button className="logout-button" onClick={onLogout} aria-label="Sair da demonstração" title="Sair da demonstração"><LogOut size={16} /></button>
+            <button className="logout-button" onClick={onLogout} aria-label="Sair"><LogOut size={16} /></button>
           </div>
         </div>
       </aside>
-
       {mobileMenu && <button className="mobile-backdrop" onClick={() => setMobileMenu(false)} aria-label="Fechar menu" />}
-
       <main className="main-area">
         <header className="topbar">
           <button className="mobile-menu-button icon-button" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu size={20} /></button>
           <div className="breadcrumbs"><span>Área de trabalho</span><ChevronRight size={15} /><strong>{section}</strong></div>
-          <div className="topbar-actions">
-            <button className="icon-button notification-button" aria-label="Notificações"><Bell size={18} /><span /></button>
+          <div className="topbar-actions" style={{position: 'relative'}}>
+            <button 
+              className="icon-button notification-button" 
+              aria-label="Notificações"
+              onClick={() => {
+                setShowNotificationsDropdown(prev => !prev);
+                setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+              }}
+            >
+              <Bell size={18} />
+              {unreadCount > 0 && <span />}
+            </button>
+
+            {showNotificationsDropdown && (
+              <div className="notifications-dropdown">
+                <div className="dropdown-header">
+                  <strong>Notificações</strong>
+                  <span onClick={() => setNotifications([])}>Limpar tudo</span>
+                </div>
+                <div className="dropdown-list">
+                  {notifications.map((n) => (
+                    <div key={n.id} className={`dropdown-item ${n.unread ? 'unread' : ''}`}>
+                      <p>{n.text}</p>
+                      <small>{n.time}</small>
+                    </div>
+                  ))}
+                  {!notifications.length && <div className="dropdown-empty">Nenhuma notificação por enquanto.</div>}
+                </div>
+              </div>
+            )}
+
             <div className="avatar avatar-small">{profile === 'corretor' ? 'MC' : 'MA'}</div>
           </div>
         </header>
 
         <div className="page-content">
-          {error && <div className="alert alert-error"><span>{error}</span><button onClick={() => window.location.reload()}>Tentar novamente</button></div>}
+          {globalError && <div className="alert alert-error"><span>{globalError}</span><button onClick={() => window.location.reload()}>Tentar novamente</button></div>}
           {notice && <div className="alert alert-success"><Check size={17} /> {notice}<button onClick={() => setNotice('')} aria-label="Fechar"><X size={16} /></button></div>}
 
           {profile === 'corretor' && section === 'Visão geral' && (
-            <BrokerDashboard
-              dashboard={dashboard}
-              leads={leads}
-              properties={properties}
-              loading={loading}
-              onSection={chooseSection}
-              onOpenProperty={setSelectedProperty}
+            <BrokerDashboard dashboard={dashboard} leads={leads} properties={properties} loading={loading} onSection={chooseSection} onOpenProperty={setSelectedProperty} />
+          )}
+
+          {((profile === 'corretor' && section === 'Imóveis') || (profile === 'cliente' && ['Explorar imóveis', 'Favoritos'].includes(section))) && (
+            <PropertyCatalog
+              profile={profile} section={section} properties={filteredProperties} search={search} type={type} purpose={purpose} favoriteIds={favoriteIds} loading={loading}
+              onSearch={setSearch} onType={setType} onPurpose={setPurpose} onFavorite={toggleFavorite} onOpenProperty={setSelectedProperty} onLead={setLeadProperty}
+              onAddProperty={() => setPropertyDialogOpen(true)}
             />
           )}
 
-          {((profile === 'corretor' && section === 'Imóveis')
-            || (profile === 'cliente' && ['Explorar imóveis', 'Favoritos'].includes(section))) && (
-            <PropertyCatalog
-              profile={profile}
-              section={section}
-              properties={filteredProperties}
-              search={search}
-              type={type}
-              purpose={purpose}
-              favoriteIds={favoriteIds}
-              loading={loading}
-              onSearch={setSearch}
-              onType={setType}
-              onPurpose={setPurpose}
-              onFavorite={toggleFavorite}
-              onOpenProperty={setSelectedProperty}
-              onLead={setLeadProperty}
+          {profile === 'cliente' && section === 'Mensagens' && (
+            <ClientMessagesWorkspace 
+              leads={leads} 
+              onShowProperties={() => chooseSection('Explorar imóveis')} 
+              onOpenChat={(lead) => setActiveChatLead(lead)} 
             />
           )}
 
           {profile === 'corretor' && section === 'Meus contatos' && (
             <LeadWorkspace
-              dashboard={dashboard}
-              leads={leads}
-              onShowProperties={() => chooseSection('Imóveis')}
-              onAddContact={() => { setContactError(''); setContactDialogOpen(true); }}
+              dashboard={dashboard} leads={leads} onShowProperties={() => chooseSection('Imóveis')} onAddContact={() => { setContactError(''); setContactDialogOpen(true); }}
+              onUpdateStatus={updateLeadStatus} onOpenChat={(lead) => setActiveChatLead(lead)}
             />
           )}
+
           {profile === 'corretor' && section === 'Negociações' && (
             <DealWorkspace
-              properties={properties}
-              deals={deals}
-              activeDealCount={activeDealCount}
-              onCreateDeal={addDeal}
+              properties={properties} deals={deals} activeDealCount={activeDealCount}
+              onCreateDeal={addDeal} onUpdateStage={updateDealStage} onOpenChat={(deal) => setActiveDealChat(deal)}
             />
+          )}
+
+          {profile === 'cliente' && section === 'Assistente IA' && (
+            <AiChatWorkspace properties={properties} onOpenProperty={setSelectedProperty} />
           )}
         </div>
       </main>
 
-      {selectedProperty && (
-        <PropertyDialog
-          property={selectedProperty}
-          profile={profile}
-          favorite={favoriteIds.includes(selectedProperty.id)}
-          onClose={() => setSelectedProperty(null)}
-          onFavorite={() => toggleFavorite(selectedProperty.id)}
-          onLead={() => { setLeadProperty(selectedProperty); setSelectedProperty(null); }}
+      {selectedProperty && <PropertyDialog property={selectedProperty} profile={profile} favorite={favoriteIds.includes(selectedProperty.id)} onClose={() => setSelectedProperty(null)} onFavorite={() => toggleFavorite(selectedProperty.id)} onLead={() => { setLeadProperty(selectedProperty); setSelectedProperty(null); }} />}
+      {leadProperty && <LeadDialog property={leadProperty} errorMessage={leadError} onClose={() => { setLeadProperty(null); setLeadError(''); }} onSubmit={submitLead} />}
+      {contactDialogOpen && <ContactDialog properties={properties} errorMessage={contactError} saving={contactSaving} onClose={() => setContactDialogOpen(false)} onSubmit={submitContact} />}
+      {propertyDialogOpen && <NewPropertyDialog errorMessage={propertyError} saving={propertySaving} onClose={() => setPropertyDialogOpen(false)} onSubmit={submitNewProperty} />}
+      
+      {activeChatLead && (
+        <ChatModal 
+          entity={activeChatLead} 
+          title={profile === 'corretor' ? `Chat com ${activeChatLead.nome}` : 'Imobiliária Horizonte'} 
+          subtitle={profile === 'corretor' ? `Telefone: ${activeChatLead.telefone}` : 'Atendimento ao Cliente'} 
+          currentUserRole={profile}
+          onClose={() => setActiveChatLead(null)} 
+          onSend={(text) => sendLeadMessage(activeChatLead.id, text, profile)} 
         />
       )}
-      {leadProperty && <LeadDialog property={leadProperty} errorMessage={leadError} onClose={() => { setLeadProperty(null); setLeadError(''); }} onSubmit={submitLead} />}
-      {contactDialogOpen && (
-        <ContactDialog
-          properties={properties}
-          errorMessage={contactError}
-          saving={contactSaving}
-          onClose={() => setContactDialogOpen(false)}
-          onSubmit={submitContact}
+      
+      {activeDealChat && (
+        <ChatModal 
+          entity={activeDealChat} 
+          title={`Negociação: ${activeDealChat.name}`} 
+          subtitle={`Imóvel: ${activeDealChat.property}`} 
+          currentUserRole={profile}
+          onClose={() => setActiveDealChat(null)} 
+          onSend={(text) => sendDealMessage(activeDealChat.id, text, profile)} 
         />
       )}
     </div>
@@ -482,24 +543,13 @@ function BrokerDashboard({ dashboard, leads = [], properties, loading, onSection
   const activeTasks = taskList.filter((task) => !task.concluida);
   const completedTasks = taskList.filter((task) => task.concluida);
   const visibleTasks = taskView === 'pending' ? activeTasks : completedTasks;
-  const today = new Intl.DateTimeFormat('pt-BR', {
-    weekday: 'long',
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date()).toLocaleUpperCase('pt-BR');
+  const today = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }).format(new Date()).toLocaleUpperCase('pt-BR');
 
   function addTask(event) {
     event.preventDefault();
     if (!newTask.trim()) return;
-    setTaskList((current) => [...current, {
-      id: Date.now(),
-      titulo: newTask.trim(),
-      descricao: 'Adicionada agora',
-      concluida: false,
-    }]);
-    setNewTask('');
-    setAddingTask(false);
+    setTaskList((current) => [...current, { id: Date.now(), titulo: newTask.trim(), descricao: 'Adicionada agora', concluida: false }]);
+    setNewTask(''); setAddingTask(false);
   }
 
   return (
@@ -532,9 +582,7 @@ function BrokerDashboard({ dashboard, leads = [], properties, loading, onSection
             ))}
             {!visibleTasks.length && !loading && <EmptyState icon={CheckCheck} title={taskView === 'pending' ? 'Tudo em dia' : 'Nenhuma tarefa concluída'} text={taskView === 'pending' ? 'Suas tarefas aparecerão aqui.' : 'As tarefas concluídas ficam reunidas aqui.'} />}
           </div>
-          {addingTask
-            ? <form className="add-task-form" onSubmit={addTask}><input autoFocus value={newTask} onChange={(event) => setNewTask(event.target.value)} placeholder="Descreva a nova tarefa" aria-label="Nova tarefa" /><button type="submit">Salvar</button><button type="button" onClick={() => { setAddingTask(false); setNewTask(''); }}>Cancelar</button></form>
-            : <button className="add-task" onClick={() => setAddingTask(true)}><Plus size={16} /> Adicionar tarefa</button>}
+          {addingTask ? <form className="add-task-form" onSubmit={addTask}><input autoFocus value={newTask} onChange={(event) => setNewTask(event.target.value)} placeholder="Descreva a nova tarefa" aria-label="Nova tarefa" /><button type="submit">Salvar</button><button type="button" onClick={() => { setAddingTask(false); setNewTask(''); }}>Cancelar</button></form> : <button className="add-task" onClick={() => setAddingTask(true)}><Plus size={16} /> Adicionar tarefa</button>}
         </section>
         <aside className="right-column">
           <section className="panel lead-summary">
@@ -564,13 +612,13 @@ function MetricCard({ icon: Icon, label, value, detail, tone = '' }) {
   return <article className={`metric-card ${tone}`}><div className="metric-top"><span>{label}</span><Icon size={19} strokeWidth={1.7} /></div><strong>{value}</strong><small>{detail}</small></article>;
 }
 
-function PropertyCatalog({ profile, section, properties, search, type, purpose, favoriteIds, loading, onSearch, onType, onPurpose, onFavorite, onOpenProperty, onLead }) {
+function PropertyCatalog({ profile, section, properties, search, type, purpose, favoriteIds, loading, onSearch, onType, onPurpose, onFavorite, onOpenProperty, onLead, onAddProperty }) {
   const client = profile === 'cliente';
   return (
     <>
       <section className={`catalog-heading ${client ? 'client-heading' : ''}`}>
         {client && <div className="catalog-welcome"><span className="eyebrow"><Sparkles size={14} /> UM LUGAR PARA CHAMAR DE SEU</span><h1>Seu próximo capítulo<br />começa em casa.</h1><p>Encontre um espaço com a sua cara, no seu tempo.</p></div>}
-        {!client && <div><h1>Imóveis</h1><p className="page-subtitle">Sua carteira organizada. O imóvel certo, sempre à mão.</p></div>}
+        {!client && <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}><div><h1>Imóveis</h1><p className="page-subtitle">Sua carteira organizada. O imóvel certo, sempre à mão.</p></div><button className="button button-dark" onClick={onAddProperty}><Plus size={17} /> Adicionar imóvel</button></div>}
         {client && <div className="client-hero-image"><img src="https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1000&q=85" alt="Sala de estar iluminada com vista para a cidade" /></div>}
       </section>
       <div className="catalog-counts">
@@ -585,12 +633,7 @@ function PropertyCatalog({ profile, section, properties, search, type, purpose, 
         <button className="filter-button" onClick={() => { onSearch(''); onType(''); onPurpose(''); }}><Filter size={16} /> Limpar filtros</button>
       </section>
       <div className="results-line"><span>{loading ? 'Carregando imóveis...' : client ? `${properties.length} imóveis encontrados` : `Exibindo ${properties.length} imóveis da carteira`}</span>{client && <button className="sort-button"><ArrowDownUp size={14} /> Mais recentes</button>}</div>
-      {loading ? <div className="loading-grid"><div /><div /><div /></div>
-        : properties.length
-          ? <div className="property-grid">{properties.map((property) => (
-            <PropertyCard key={property.id} property={property} favorite={favoriteIds.includes(property.id)} onFavorite={() => onFavorite(property.id)} onOpen={() => onOpenProperty(property)} onLead={() => onLead(property)} client={client} />
-          ))}</div>
-          : <EmptyState icon={Search} title="Nenhum imóvel encontrado" text="Tente mudar a busca ou remover alguns filtros." />}
+      {loading ? <div className="loading-grid"><div /><div /><div /></div> : properties.length ? <div className="property-grid">{properties.map((property) => <PropertyCard key={property.id} property={property} favorite={favoriteIds.includes(property.id)} onFavorite={() => onFavorite(property.id)} onOpen={() => onOpenProperty(property)} onLead={() => onLead(property)} client={client} />)}</div> : <EmptyState icon={Search} title="Nenhum imóvel encontrado" text="Tente mudar a busca ou remover alguns filtros." />}
     </>
   );
 }
@@ -598,11 +641,7 @@ function PropertyCatalog({ profile, section, properties, search, type, purpose, 
 function PropertyCard({ property, favorite, onFavorite, onOpen, onLead, client = false }) {
   return (
     <article className="property-card">
-      <button className="property-photo" onClick={onOpen} aria-label={`Ver detalhes de ${property.titulo}`}>
-        <img src={property.imagem} alt={property.titulo} loading="lazy" />
-        <span className={`purpose-badge ${property.finalidade === 'LOCACAO' ? 'rent-badge' : ''}`}>{property.finalidade === 'LOCACAO' ? 'Locação' : 'Venda'}</span>
-        <span className={`availability ${property.status === 'DISPONIVEL' ? '' : 'reserved'}`}>{property.status === 'DISPONIVEL' ? 'Disponível' : 'Em negociação'}</span>
-      </button>
+      <button className="property-photo" onClick={onOpen} aria-label={`Ver detalhes de ${property.titulo}`}><img src={property.imagem} alt={property.titulo} loading="lazy" /><span className={`purpose-badge ${property.finalidade === 'LOCACAO' ? 'rent-badge' : ''}`}>{property.finalidade === 'LOCACAO' ? 'Locação' : 'Venda'}</span><span className={`availability ${property.status === 'DISPONIVEL' ? '' : 'reserved'}`}>{property.status === 'DISPONIVEL' ? 'Disponível' : 'Em negociação'}</span></button>
       <div className="property-info">
         <div className="property-code-row"><span>{property.codigo}</span>{onFavorite && <button className={`favorite-button ${favorite ? 'is-favorite' : ''}`} onClick={onFavorite} aria-label={favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}><Heart size={17} fill={favorite ? 'currentColor' : 'none'} /></button>}</div>
         <button className="property-title" onClick={onOpen}>{property.titulo}</button>
@@ -651,19 +690,160 @@ function LeadDialog({ property, errorMessage, onClose, onSubmit }) {
   );
 }
 
-function LeadWorkspace({ dashboard, leads, onShowProperties, onAddContact }) {
+function ClientMessagesWorkspace({ leads, onShowProperties, onOpenChat }) {
+  return (
+    <>
+      <section className="page-heading">
+        <div><p className="eyebrow">SEUS CONTATOS</p><h1>Mensagens</h1><p className="page-subtitle">Acompanhe suas conversas com nossos corretores.</p></div>
+        <button className="button button-dark" onClick={onShowProperties}><House size={16} /> Buscar imóveis</button>
+      </section>
+      
+      <div style={{marginTop: '20px', display: 'grid', gap: '15px'}}>
+        {!leads.length && <EmptyState icon={MessageCircle} title="Nenhuma mensagem" text="Suas interações e mensagens com corretores aparecerão aqui." />}
+        {leads.map((lead) => {
+          const lastMsg = lead.chat[lead.chat.length - 1];
+          const senderLabel = lastMsg?.sender === 'corretor' ? 'Corretor' : 'Você';
+          return (
+            <div key={lead.id} className="client-message-card" onClick={() => onOpenChat(lead)}>
+              <div className="avatar lead-avatar mint" style={{width: '42px', height: '42px', flex: 'none'}}><Building2 size={18} /></div>
+              <div className="client-message-info">
+                 <div className="client-message-top">
+                   <strong>Equipe Morada Horizonte</strong>
+                   <span className="client-property-tag">{lead.interesse || 'Interesse em imóvel'}</span>
+                 </div>
+                 <p className="client-message-preview">
+                   <span>{senderLabel}:</span> {lastMsg?.text || 'Sem mensagens recentes'}
+                 </p>
+              </div>
+              <button className="button button-light" style={{height: '36px', fontSize: '11px', flex: 'none'}}><MessageCircle size={14} /> Abrir chat</button>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function LeadWorkspace({ dashboard, leads, onShowProperties, onAddContact, onUpdateStatus, onOpenChat }) {
   return (
     <>
       <section className="page-heading"><div><p className="eyebrow">RELACIONAMENTO</p><h1>Meus contatos</h1><p className="page-subtitle">Cada boa conversa pode começar uma nova história.</p></div><button className="button button-dark" onClick={onAddContact}><Plus size={17} /> Adicionar contato</button></section>
       <section className="metric-grid small-metrics"><MetricCard icon={Users} label="Leads ativos" value={dashboard?.novosLeads ?? 0} detail="No momento" /><MetricCard icon={Clock3} label="Aguardando retorno" value="2" detail="Responda com carinho" tone="sand" /><MetricCard icon={CalendarDays} label="Visitas agendadas" value="4" detail="Nesta semana" tone="mint" /></section>
       <section className="panel table-panel"><div className="panel-heading"><div><h2>Seus contatos</h2><p>Organize conversas e próximos passos.</p></div><button className="select-filter compact-select"><ListFilter size={15} /> Todos os contatos <ChevronDown size={14} /></button></div>
-        <div className="contact-table"><div className="table-row table-head"><span>CONTATO</span><span>INTERESSE</span><span>ÚLTIMO CONTATO</span><span>STATUS</span><span /></div>
-          {leads.map((lead, index) => <ContactRow key={lead.id} initials={lead.nome.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()} name={lead.nome} email={lead.email} interest={lead.interesse} date={lead.data} status={lead.status} tone={['coral', 'lilac', 'mint'][index % 3]} />)}
+        <div className="contact-table"><div className="table-row table-head" style={{gridTemplateColumns: '1.2fr 1.3fr 1fr 1.2fr 95px 32px'}}><span>CONTATO</span><span>INTERESSE</span><span>DATA</span><span>STATUS</span><span>CHAT</span><span /></div>
+          {leads.map((lead, index) => (
+            <div key={lead.id} className="table-row" style={{gridTemplateColumns: '1.2fr 1.3fr 1fr 1.2fr 95px 32px'}}>
+              <span className="table-person"><span className={`avatar lead-avatar ${['coral', 'lilac', 'mint'][index % 3]}`}>{lead.nome.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</span><span><strong>{lead.nome}</strong><small>{lead.email}</small></span></span>
+              <span>{lead.interesse}</span>
+              <span>{lead.data}</span>
+              <span>
+                <select value={lead.status} onChange={(e) => onUpdateStatus(lead.id, e.target.value)} className="select-filter compact-select" style={{width: '100%', height: '32px'}}>
+                  <option value="Novo lead">Novo lead</option>
+                  <option value="Em atendimento">Em atendimento</option>
+                  <option value="Visita agendada">Visita agendada</option>
+                  <option value="Fechado">Fechado</option>
+                </select>
+              </span>
+              <span>
+                <button className="card-contact-button" onClick={() => onOpenChat(lead)} style={{margin: 0}}><MessageCircle size={14} /> Chat</button>
+              </span>
+              <button className="icon-button"><MoreHorizontal size={18} /></button>
+            </div>
+          ))}
           {!leads.length && <EmptyState icon={Users} title="Ainda não há leads" text="As solicitações de contato dos clientes aparecerão aqui." />}
         </div>
       </section>
       <div className="tip-banner"><Sparkles size={20} /><span><strong>Uma boa indicação começa com escuta.</strong><small>Confira imóveis que combinam com o perfil dos seus clientes.</small></span><button className="text-button" onClick={onShowProperties}>Ver imóveis <ArrowRight size={15} /></button></div>
     </>
+  );
+}
+
+function ChatModal({ entity, title, subtitle, currentUserRole, onClose, onSend }) {
+  const [text, setText] = useState('');
+  const chatEndRef = useRef(null);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [entity.chat]);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <section className="workflow-dialog" onClick={(e) => e.stopPropagation()} style={{maxWidth: '500px', height: '600px', display: 'flex', flexDirection: 'column'}}>
+        <button className="modal-close" onClick={onClose} aria-label="Fechar"><X size={20} /></button>
+        <span className="eyebrow">{currentUserRole === 'corretor' ? 'ATENDIMENTO AO CLIENTE' : 'ATENDIMENTO'}</span>
+        <h2>{title}</h2>
+        <p style={{marginBottom: '10px'}}>{subtitle}</p>
+        
+        <div style={{flex: 1, overflowY: 'auto', background: '#f8faf9', border: '1px solid #e2e7e2', borderRadius: '10px', padding: '15px', display: 'flex', flexDirection: 'column', gap: '12px'}}>
+          {entity.chat.map((c, i) => {
+            const isMe = (currentUserRole === 'corretor' && c.sender === 'corretor') || (currentUserRole === 'cliente' && c.sender === 'client');
+            
+            return (
+              <div key={i} style={{alignSelf: isMe ? 'flex-end' : 'flex-start', background: isMe ? '#286b5c' : '#fff', color: isMe ? '#fff' : '#2b3e37', padding: '10px 14px', borderRadius: '12px', maxWidth: '80%', fontSize: '13px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', border: isMe ? 'none' : '1px solid #e2e7e2'}}>
+                <small style={{display: 'block', fontSize: '10px', opacity: 0.7, marginBottom: '4px'}}>
+                  {isMe ? 'Você' : (currentUserRole === 'corretor' ? (entity.nome || entity.name) : 'Corretor')}
+                </small>
+                {c.text}
+              </div>
+            );
+          })}
+          <div ref={chatEndRef} />
+        </div>
+
+        <form onSubmit={(e) => { e.preventDefault(); onSend(text); setText(''); }} style={{display: 'flex', gap: '10px', marginTop: '15px'}}>
+          <input type="text" placeholder="Digite sua mensagem..." value={text} onChange={(e) => setText(e.target.value)} style={{flex: 1, padding: '10px 15px', borderRadius: '8px', border: '1px solid #e2e7e2'}} autoFocus />
+          <button type="submit" className="button button-dark"><Send size={16} /> Enviar</button>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function NewPropertyDialog({ errorMessage, saving, onClose, onSubmit }) {
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <section className="workflow-dialog" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="Fechar"><X size={20} /></button>
+        <span className="eyebrow">NOVO IMÓVEL NA CARTEIRA</span>
+        <h2>Cadastrar Imóvel</h2>
+        <p>Este imóvel irá direto para o catálogo geral e aparecerá para todos os usuários.</p>
+        <form className="workflow-form" onSubmit={(event) => { event.preventDefault(); onSubmit(new FormData(event.currentTarget)); }}>
+          <label>Título do Imóvel<input name="titulo" placeholder="Ex: Apartamento Moderno no Cambuí" required maxLength={100} /></label>
+          <div className="form-two">
+            <label>Tipo
+              <select name="tipo" defaultValue="APARTAMENTO">
+                <option value="APARTAMENTO">Apartamento</option>
+                <option value="CASA">Casa</option>
+              </select>
+            </label>
+            <label>Finalidade
+              <select name="finalidade" defaultValue="VENDA">
+                <option value="VENDA">Venda</option>
+                <option value="LOCACAO">Locação</option>
+              </select>
+            </label>
+          </div>
+          <div className="form-three" style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px'}}>
+            <label>Preço (R$)<input name="preco" type="number" min="1" step="0.01" placeholder="750000" required /></label>
+            <label>Área (m²)<input name="area" type="number" min="1" step="0.1" placeholder="85" required /></label>
+            <label>Bairro<input name="bairro" placeholder="Cambuí" required /></label>
+          </div>
+          <div className="form-three" style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px'}}>
+            <label>Quartos<input name="quartos" type="number" min="0" placeholder="2" required /></label>
+            <label>Banheiros<input name="banheiros" type="number" min="0" placeholder="2" required /></label>
+            <label>Condomínio (R$)<input name="condominio" type="number" min="0" defaultValue="0" /></label>
+          </div>
+          <label>Endereço Completo<input name="endereco" placeholder="Rua Coronel Quirino, 500" required /></label>
+          <label>URL da Imagem (Foto)<input name="imagem" placeholder="https://images.unsplash.com/..." /></label>
+          <label>Descrição do Imóvel<textarea name="descricao" placeholder="Descreva os pontos fortes..." rows="2" /></label>
+          {errorMessage && <p className="lead-form-error" role="alert">{errorMessage}</p>}
+          <div className="workflow-actions">
+            <button className="button button-light" type="button" onClick={onClose}>Cancelar</button>
+            <button className="button button-dark" type="submit" disabled={saving}>{saving ? 'Cadastrando...' : 'Cadastrar Imóvel'} <ArrowRight size={16} /></button>
+          </div>
+        </form>
+      </section>
+    </div>
   );
 }
 
@@ -699,11 +879,7 @@ function ContactDialog({ properties, errorMessage, saving, onClose, onSubmit }) 
   );
 }
 
-function ContactRow({ initials, name, email, interest, date, status, tone }) {
-  return <div className="table-row"><span className="table-person"><span className={`avatar lead-avatar ${tone}`}>{initials}</span><span><strong>{name}</strong><small>{email}</small></span></span><span>{interest}</span><span>{date}</span><span><i className={`status-dot ${tone}`} />{status}</span><button className="icon-button"><MoreHorizontal size={18} /></button></div>;
-}
-
-function DealWorkspace({ properties, deals, activeDealCount, onCreateDeal }) {
+function DealWorkspace({ properties, deals, activeDealCount, onCreateDeal, onUpdateStage, onOpenChat }) {
   const [addingDeal, setAddingDeal] = useState(false);
   const [dealError, setDealError] = useState('');
 
@@ -711,36 +887,46 @@ function DealWorkspace({ properties, deals, activeDealCount, onCreateDeal }) {
     const property = properties.find((item) => item.id === Number(formData.get('imovelId')));
     const name = formData.get('cliente').trim();
     const stage = formData.get('etapa');
-    const progressByStage = {
-      'Primeiro contato': 1,
-      'Visita agendada': 2,
-      'Proposta enviada': 3,
-      'Documentação': 4,
-    };
-    if (!property) {
-      setDealError('Selecione um imóvel válido para a negociação.');
-      return;
-    }
+    const progressByStage = { 'Primeiro contato': 1, 'Visita agendada': 2, 'Proposta enviada': 3, 'Documentação': 4 };
+    
+    if (!property) { setDealError('Selecione um imóvel válido para a negociação.'); return; }
+    
     onCreateDeal({
       id: Date.now(),
       initials: name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase(),
-      name,
-      property: `${property.titulo} · ${property.codigo}`,
-      amount: compactCurrency(Number(formData.get('valor'))),
-      stage,
-      progress: progressByStage[stage],
-      tone: 'mint',
+      name, property: `${property.titulo} · ${property.codigo}`, amount: compactCurrency(Number(formData.get('valor'))),
+      stage, progress: progressByStage[stage], tone: 'mint', chat: [{sender: 'client', text: 'Estou no aguardo dos próximos passos.'}]
     });
-    setDealError('');
-    setAddingDeal(false);
+    setDealError(''); setAddingDeal(false);
   }
 
   return (
     <>
       <section className="page-heading"><div><p className="eyebrow">DO PRIMEIRO OI À CHAVE</p><h1>Negociações</h1><p className="page-subtitle">Acompanhe cada etapa até o novo começo.</p></div><button className="button button-dark" onClick={() => { setDealError(''); setAddingDeal(true); }}><Plus size={17} /> Nova negociação</button></section>
       <section className="metric-grid small-metrics"><MetricCard icon={ClipboardList} label="Em andamento" value={activeDealCount} detail="Inclui negócios criados nesta sessão" /><MetricCard icon={CheckCheck} label="Concluídas no mês" value="8" detail="Um ótimo resultado" tone="mint" /><MetricCard icon={Clock3} label="Aguardando proposta" value="3" detail="Próxima ação necessária" tone="sand" /></section>
-      <section className="panel table-panel"><div className="panel-heading"><div><h2>Suas negociações</h2><p>Uma visão clara do que vem pela frente.</p></div><button className="select-filter compact-select"><ArrowDownUp size={15} /> Mais recentes <ChevronDown size={14} /></button></div>
-        <div className="deal-list">{deals.map((deal) => <DealRow key={deal.id} {...deal} />)}</div>
+      <section className="panel table-panel"><div className="panel-heading"><div><h2>Suas negociações</h2><p>Uma visão clara do que vem pela frente.</p></div></div>
+        <div className="deal-list">
+          {deals.map((deal) => (
+            <div key={deal.id} className="deal-row" style={{gridTemplateColumns: '34px minmax(130px, 1.2fr) 90px minmax(140px, 1.2fr) 95px 70px 30px'}}>
+              <span className={`avatar lead-avatar ${deal.tone || 'mint'}`}>{deal.initials}</span>
+              <span className="deal-person"><strong>{deal.name}</strong><small>{deal.property}</small></span>
+              <strong className="deal-amount">{deal.amount}</strong>
+              <span className="deal-stage">
+                <select value={deal.stage} onChange={(e) => onUpdateStage(deal.id, e.target.value)} className="select-filter compact-select" style={{width: '100%', height: '32px'}}>
+                  <option value="Primeiro contato">Primeiro contato</option>
+                  <option value="Visita agendada">Visita agendada</option>
+                  <option value="Proposta enviada">Proposta enviada</option>
+                  <option value="Documentação">Documentação</option>
+                </select>
+              </span>
+              <span>
+                <button className="card-contact-button" onClick={() => onOpenChat(deal)} style={{margin: 0}}><MessageCircle size={14} /> Chat</button>
+              </span>
+              <div className="progress-dots">{[1, 2, 3, 4].map((step) => <i key={step} className={step <= deal.progress ? 'step-done' : ''} />)}</div>
+              <button className="icon-button"><MoreHorizontal size={18} /></button>
+            </div>
+          ))}
+        </div>
       </section>
       {addingDeal && (
         <div className="modal-backdrop" onClick={() => setAddingDeal(false)}>
@@ -761,10 +947,10 @@ function DealWorkspace({ properties, deals, activeDealCount, onCreateDeal }) {
                 <label>Valor da negociação<input name="valor" type="number" min="1" step="0.01" placeholder="Ex.: 750000" required /></label>
                 <label>Etapa
                   <select name="etapa" defaultValue="Primeiro contato">
-                    <option>Primeiro contato</option>
-                    <option>Visita agendada</option>
-                    <option>Proposta enviada</option>
-                    <option>Documentação</option>
+                    <option value="Primeiro contato">Primeiro contato</option>
+                    <option value="Visita agendada">Visita agendada</option>
+                    <option value="Proposta enviada">Proposta enviada</option>
+                    <option value="Documentação">Documentação</option>
                   </select>
                 </label>
               </div>
@@ -782,12 +968,6 @@ function DealWorkspace({ properties, deals, activeDealCount, onCreateDeal }) {
   );
 }
 
-function DealRow({ initials, name, property, amount, stage, progress, tone }) {
-  return <div className="deal-row"><span className={`avatar lead-avatar ${tone}`}>{initials}</span><span className="deal-person"><strong>{name}</strong><small>{property}</small></span><strong className="deal-amount">{amount}</strong><span className="deal-stage"><i className={`status-dot ${tone}`} />{stage}</span><div className="progress-dots">{[1, 2, 3, 4].map((step) => <i key={step} className={step <= progress ? 'step-done' : ''} />)}</div><button className="icon-button"><MoreHorizontal size={18} /></button></div>;
-}
-
 function EmptyState({ icon: Icon, title, text }) {
   return <div className="empty-state"><Icon size={27} /><strong>{title}</strong><span>{text}</span></div>;
 }
-
-export default App;
